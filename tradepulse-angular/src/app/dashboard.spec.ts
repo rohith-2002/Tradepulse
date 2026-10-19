@@ -36,4 +36,11 @@ describe('Historical dashboard prices',()=>{
   it('shows an explicit unavailable marker instead of a blank price',()=>{
     const f=setup([]);f.detectChanges();expect(f.nativeElement.querySelector('.price').textContent).toContain('—');f.destroy();
   });
+  it('updates a forming minute candle without changing recorded daily history',()=>{
+    const f=setup();f.detectChanges();const c=f.componentInstance;
+    c.applyQuote({price:1300,open:1290,high:1301,low:1280,volume:20,feedMode:'SIMULATED_LIVE',barTime:'2026-10-19T10:00:00',timestamp:'2026-10-19T10:00:01'});
+    c.applyQuote({price:1305,open:1290,high:1305,low:1280,volume:25,feedMode:'SIMULATED_LIVE',barTime:'2026-10-19T10:00:00',timestamp:'2026-10-19T10:00:02'});
+    expect(c.minuteBars()).toHaveLength(1);expect(c.minuteBars()[0].close).toBe(1305);
+    expect(c.bars()).toEqual([march]);expect(c.latest()?.price).toBe(1305);f.destroy();
+  });
 });

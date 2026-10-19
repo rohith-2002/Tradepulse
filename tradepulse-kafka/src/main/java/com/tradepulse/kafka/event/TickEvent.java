@@ -23,4 +23,6 @@ public class TickEvent {
     private BigDecimal open;
     private BigDecimal high;
     private BigDecimal low;
+    private LocalDateTime barTime;
+    private String interval;
 }

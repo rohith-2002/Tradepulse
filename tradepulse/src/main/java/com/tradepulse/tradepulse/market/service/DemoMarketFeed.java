@@ -25,9 +25,9 @@ public class DemoMarketFeed implements ApplicationRunner {
     private final org.springframework.transaction.support.TransactionTemplate tx;
     private final org.springframework.data.redis.core.StringRedisTemplate redis;
     private volatile boolean ready;
-    private int cursor;
-    private final Map<String,TickEvent> latest=new java.util.concurrent.ConcurrentHashMap<>();
-    public TickEvent quote(String symbol){return latest.get(symbol);}
+    private volatile SimulatedMarket simulation;
+    public TickEvent quote(String symbol){return simulation==null?null:simulation.quote(symbol);}
+    public SimulatedMarket.Snapshot snapshot(String symbol){if(simulation==null)throw new IllegalArgumentException("Simulation is starting");return simulation.snapshot(symbol);}
     public void run(ApplicationArguments args){
         tx.executeWithoutResult(status->{
         for(var instrument:dataset.snapshot().instruments()){
@@ -43,26 +43,13 @@ public class DemoMarketFeed implements ApplicationRunner {
         }
         });
         for(var i:dataset.snapshot().instruments()){try{redis.delete("market:ohlcv:"+i.symbol()+":1d");redis.delete("market:price:"+i.symbol());}catch(Exception ignored){}}
-        for(var instrument:dataset.snapshot().instruments()){
-            var c=dataset.month(instrument).getLast();
-            latest.put(instrument.symbol(),event(instrument,c));
-        }
+        simulation=new SimulatedMarket(dataset,Clock.system(ZoneId.of("Asia/Kolkata")),new Random());
         ready=true;
     }
-    @Scheduled(fixedDelay=3000,initialDelay=10000)
+    @Scheduled(fixedDelay=1000,initialDelay=10000)
     public void tick(){
         if(!ready)return;
-        for(var instrument:dataset.snapshot().instruments()){
-            var continuation=dataset.continuation(instrument);var candle=continuation.get(cursor%continuation.size());
-            var event=event(instrument,candle);latest.put(instrument.symbol(),event);
-            producer.sendTick(event);
-        }
-        cursor=(cursor+1)%dataset.continuation(dataset.snapshot().instruments().getFirst()).size();
-    }
-    private TickEvent event(HistoricalDataset.Instrument instrument,HistoricalDataset.Candle candle){
-        var previous=instrument.bars().stream().filter(b->b.date().isBefore(candle.date())).reduce((a,b)->b).orElseThrow();
-        var change=candle.close().subtract(previous.close()).multiply(BigDecimal.valueOf(100)).divide(previous.close(),4,java.math.RoundingMode.HALF_UP);
-        return TickEvent.builder().symbol(instrument.symbol()).price(candle.close()).open(candle.open()).high(candle.high()).low(candle.low()).volume(candle.volume()).changePercent(change)
-            .timestamp(LocalDateTime.now()).sourceDate(candle.date()).feedMode("HISTORICAL_REPLAY").build();
+        // Update every symbol before publishing so a slow broker cannot leave other quotes unchanged.
+        for(var event:simulation.advance())producer.sendTick(event);
     }
 }

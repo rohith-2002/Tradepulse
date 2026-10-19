@@ -13,8 +13,10 @@ import java.util.*;
 public class BacktestController {
     private final BacktestService service;
     private final BacktestWorker worker;
+    private final LiveStrategyService live;
     public record RunRequest(Long strategyId,LocalDate fromDate,LocalDate toDate){}
     public record StrategyRequest(String name,Map<String,Object> parameters){}
+    @PostMapping("/live") public Map<String,Object> live(@RequestBody StrategyRequest r){return live.preview(r.name(),r.parameters());}
     @GetMapping("/strategies") public List<Strategy> strategies(@AuthenticationPrincipal UserDetails u){return service.getUserStrategies(u.getUsername());}
     @PostMapping("/strategies") public Strategy create(@AuthenticationPrincipal UserDetails u,@RequestBody StrategyRequest r){return service.create(u.getUsername(),r.name(),r.parameters());}
     @GetMapping("/runs") public List<BacktestRun> runs(@AuthenticationPrincipal UserDetails u){return service.getUserBacktestRuns(u.getUsername());}

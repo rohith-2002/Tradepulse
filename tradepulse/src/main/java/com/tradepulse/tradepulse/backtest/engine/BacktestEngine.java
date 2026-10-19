@@ -27,6 +27,15 @@ public class BacktestEngine {
         return execute(strategy,history,null);
     }
     public Map<String,Object> execute(Strategy strategy, List<OhlcvBar> history, java.time.LocalDate tradingFrom) {
+        return execute(strategy, history, tradingFrom, true);
+    }
+    public Map<String,Object> execute(Strategy strategy, List<OhlcvBar> history, java.time.LocalDate tradingFrom, boolean liquidate) {
+        return calculate(strategy,history,tradingFrom,liquidate,-1);
+    }
+    public Map<String,Object> executeLive(Strategy strategy,List<OhlcvBar> history,int firstTradingBar){
+        return calculate(strategy,history,null,false,firstTradingBar);
+    }
+    private Map<String,Object> calculate(Strategy strategy,List<OhlcvBar> history,java.time.LocalDate tradingFrom,boolean liquidate,int firstTradingBar){
         validate(strategy);
         var p = strategy.getParameters();
         int fast=(int)number(p,"fastPeriod",9), slow=(int)number(p,"slowPeriod",26), period=(int)number(p,"period",14), signal=(int)number(p,"signalPeriod",9);
@@ -53,6 +62,10 @@ public class BacktestEngine {
             if(start<warmup)throw new IllegalArgumentException("Not enough earlier bars to warm up these periods; choose smaller periods or a later start date");
             if(start>=history.size())throw new IllegalArgumentException("No candles in the requested trading period");
         }
+        if(firstTradingBar>=0){
+            if(firstTradingBar<warmup||firstTradingBar>=history.size())throw new IllegalArgumentException("Periods exceed the available simulation warm-up; choose smaller periods");
+            start=firstTradingBar;
+        }
         for(int i=start;i<close.length;i++) {
             // A signal from yesterday's close is executed at today's open: no same-bar lookahead.
             int t=i-1;
@@ -60,12 +73,12 @@ public class BacktestEngine {
             if(strategy.getName().equals("RSI")) { buy=a[t]<number(p,"oversold",30); sell=a[t]>number(p,"overbought",70); }
             else { buy=a[t]>b[t] && a[t-1]<=b[t-1]; sell=a[t]<b[t] && a[t-1]>=b[t-1]; }
             double price=history.get(i).getOpen().doubleValue();
-            if(buy && quantity==0 && i<close.length-1) { entryCost=cash; quantity=cash/(price*(1+fee)); cash=0; }
+            if(buy && quantity==0 && (!liquidate || i<close.length-1)) { entryCost=cash; quantity=cash/(price*(1+fee)); cash=0; }
             else if(sell && quantity>0) {
                 cash=quantity*price*(1-fee); double profit=cash-entryCost; if(profit>0)wins++;
                 trades.add(Map.of("date",history.get(i).getBarTime().toString(),"exitPrice",round(price),"profit",round(profit))); quantity=0;
             }
-            if(i==close.length-1 && quantity>0) {
+            if(liquidate && i==close.length-1 && quantity>0) {
                 cash=quantity*close[i]*(1-fee); double profit=cash-entryCost; if(profit>0)wins++;
                 trades.add(Map.of("date",history.get(i).getBarTime().toString(),"exitPrice",round(close[i]),"profit",round(profit))); quantity=0;
             }
@@ -73,11 +86,13 @@ public class BacktestEngine {
             curve.add(Map.of("date",history.get(i).getBarTime().toString(),"equity",round(equity)));
         }
         Map<String,Object> result=new LinkedHashMap<>();
-        result.put("strategyType",strategy.getName()); result.put("initialCapital",initial); result.put("finalBalance",round(cash));
-        result.put("netProfit",round(cash-initial)); result.put("returnPercent",round((cash/initial-1)*100));
+        double balance=cash+quantity*close[close.length-1];
+        result.put("strategyType",strategy.getName()); result.put("initialCapital",initial); result.put("finalBalance",round(balance));
+        result.put("netProfit",round(balance-initial)); result.put("returnPercent",round((balance/initial-1)*100));
+        result.put("position",quantity>0?"LONG":"CASH"); result.put("quantity",quantity); result.put("cash",round(cash));
         result.put("maxDrawdownPercent",round(drawdown*100)); result.put("totalTrades",trades.size());
         result.put("winRate",trades.isEmpty()?0:(double)wins/trades.size()); result.put("equityCurve",curve); result.put("trades",trades);
-        result.put("assumptions","Long-only fractional positions; next-bar open fills; fees on both sides; final close liquidation; no slippage or taxes.");
+        result.put("assumptions","Long-only fractional positions; next-bar open fills; fees on executed trades; "+(liquidate?"final close liquidation":"open positions valued at latest revealed close")+"; no slippage or taxes.");
         return result;
     }
     private double round(double value){ return Math.round(value*100)/100.0; }

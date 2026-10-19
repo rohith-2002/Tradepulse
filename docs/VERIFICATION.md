@@ -49,3 +49,16 @@ The final Angular build stalled while using its persistent cache. Disabling that
 
 
 18 October follow-up: A user build failed with ClassFormatError (invalid method Code length 0) in BacktestResultEvent. A root clean verify rebuilt both modules successfully: 14 tests passed, zero failures/errors. scripts/verify.ps1 now cleans generated output before verification. See clean-verification.log for this run.
+
+## 19 October 2026 — continuous simulation
+
+Replaced repeating daily replay with current-time synthetic ticks calibrated from the recorded March returns. Added forming minute candles, automatic alert refresh, and a live strategy endpoint that keeps open positions marked to current prices.
+
+- Full backend clean verify: 23 tests passed, no failures or errors.
+- Angular: 13 tests passed; final production build passed.
+- Local backend restarted with the packaged build against the running PostgreSQL, Redis and Kafka services.
+- Authenticated smoke test: RELIANCE changed from 1101.5735 to 1101.0066 across successive quotes; 120 minute candles returned; live strategy response succeeded; a test in-app alert became TRIGGERED and produced one notification through Kafka.
+- Browser verification: dashboard, alerts and strategy pages showed connected, updating simulated prices. A test RSI configuration held an open position whose portfolio value changed with incoming prices. The generated intraday chart and recorded daily history remained separate.
+- Live strategy and alerts were exercised using a separate local simulation-check account. No external email was sent. SMTP and production/multi-instance resilience were not tested.
+
+See CONTINUOUS_SIMULATION.md for generation assumptions, warm-up behavior and session-storage limitations. These results supersede the earlier browser-verification limitation for the screens checked here, but are not a comprehensive production acceptance test.

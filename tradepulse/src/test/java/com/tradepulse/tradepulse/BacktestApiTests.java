@@ -41,19 +41,19 @@ class BacktestApiTests {
             assertEquals(instrument.bars().size(),stored.size());
             assertTrue(stored.stream().allMatch(b->b.getBarTime().getYear()<2021));
         }
-        assertEquals(LocalDate.of(2020,3,31),importer.quote("RELIANCE").getSourceDate());
+        assertEquals("SIMULATED_LIVE",importer.quote("RELIANCE").getFeedMode());
+        assertEquals(121,importer.snapshot("RELIANCE").bars().size());
         importer.tick();
         var events=org.mockito.ArgumentCaptor.forClass(com.tradepulse.kafka.event.TickEvent.class);
         org.mockito.Mockito.verify(producer,org.mockito.Mockito.times(6)).sendTick(events.capture());
         for(var event:events.getAllValues()){
-            var instrument=dataset.snapshot().instruments().stream().filter(i->i.symbol().equals(event.getSymbol())).findFirst().orElseThrow();
-            var candle=dataset.continuation(instrument).getFirst();
-            assertEquals(0,candle.close().compareTo(event.getPrice()));
-            assertEquals(candle.date(),event.getSourceDate());
-            assertEquals(candle.volume(),event.getVolume());
-            assertEquals("HISTORICAL_REPLAY",event.getFeedMode());
+            assertTrue(event.getPrice().signum()>0);
+            assertEquals("1m",event.getInterval());
+            assertEquals("SIMULATED_LIVE",event.getFeedMode());
+            assertEquals(event.getTimestamp().toLocalDate(),event.getSourceDate());
         }
     }
+
     @Test void completesAsyncRunWithinRequestedDatesAndSerializesResults()throws Exception{
         jdbc.execute("CREATE TABLE IF NOT EXISTS event_outbox(id BIGSERIAL PRIMARY KEY,topic VARCHAR(255),event_key VARCHAR(255),event_type VARCHAR(100),payload TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,published_at TIMESTAMP)");
         var symbol=symbols.save(MarketSymbol.builder().symbol("BACKTEST").exchange("NSE").active(true).build());

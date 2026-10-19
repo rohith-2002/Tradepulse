@@ -19,4 +19,13 @@ class BacktestEngineTests {
     @Test void rejectsInsufficientAndUnorderedHistory(){assertThrows(IllegalArgumentException.class,()->engine.execute(strategy("RSI"),history(false).subList(0,4)));var bars=history(false);Collections.reverse(bars);assertThrows(IllegalArgumentException.class,()->engine.execute(strategy("SMA"),bars));}
     @Test void feesReduceBalance(){var s=strategy("SMA");s.getParameters().put("feeBps",0);double free=(Double)engine.execute(s,history(false)).get("finalBalance");s.getParameters().put("feeBps",50);assertTrue((Double)engine.execute(s,history(false)).get("finalBalance")<free);}
     @Test void changingFuturePricesDoesNotChangeEarlierEquity(){var bars=history(false);var original=(List<?>)engine.execute(strategy("SMA"),bars).get("equityCurve");bars.get(150).setClose(BigDecimal.valueOf(500));var changed=(List<?>)engine.execute(strategy("SMA"),bars).get("equityCurve");assertEquals(original.subList(0,100),changed.subList(0,100));}
+    @Test void replayAllowsLastRevealedOpenEntryAndDoesNotLiquidateIt(){
+        var bars=history(true).subList(0,20);
+        for(int i=0;i<bars.size();i++){var price=BigDecimal.valueOf(120-i);bars.get(i).setOpen(price);bars.get(i).setClose(price);}
+        var s=strategy("RSI");
+        var result=engine.execute(s,bars,bars.getLast().getBarTime().toLocalDate(),false);
+        assertEquals("LONG",result.get("position"));assertEquals(0,result.get("totalTrades"));
+        assertTrue((Double)result.get("quantity")>0);assertEquals(0.0,result.get("cash"));
+        assertEquals("CASH",engine.execute(s,bars,bars.getLast().getBarTime().toLocalDate()).get("position"));
+    }
 }

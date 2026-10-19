@@ -27,7 +27,7 @@ public class MarketDataService {
     public Map<String,Object> datasetInfo(){
         if(!demo)return Map.of("enabled",false);
         var s=dataset.snapshot();
-        return Map.of("enabled",true,"source",s.source(),"sourceUrl",s.sourceUrl(),"from",s.from(),"to",s.to(),"replayFrom",s.replayFrom(),"replayTo",s.replayTo(),"notes",s.notes(),"instruments",s.instruments().stream().map(i->Map.of("symbol",i.symbol(),"dailyVolatilityPercent",i.dailyVolatilityPercent())).toList());
+        return Map.of("enabled",true,"mode","SIMULATED_LIVE","source",s.source(),"sourceUrl",s.sourceUrl(),"from",s.from(),"to",s.to(),"notes","Continuous synthetic ticks calibrated from historical daily returns; 1-minute candles; not exchange quotes. Session resets on server restart.","instruments",s.instruments().stream().map(i->Map.of("symbol",i.symbol(),"dailyVolatilityPercent",i.dailyVolatilityPercent())).toList());
     }
     public TickEvent quote(String symbol){
         var feed=replayFeed.getIfAvailable();
@@ -41,15 +41,18 @@ public class MarketDataService {
         var b=history.getLast();return TickEvent.builder().symbol(symbol).price(b.getClose()).volume(b.getVolume()).sourceDate(b.getBarTime().toLocalDate()).open(b.getOpen()).high(b.getHigh()).low(b.getLow()).feedMode("HISTORICAL_CLOSE").build();
     }
     public List<MarketSymbol> getAllActiveSymbols(){return symbols.findAll().stream().filter(s->Boolean.TRUE.equals(s.getActive())).toList();}
-    public List<MarketTick> getRecentTicks(String symbol){return ticks.findTop100BySymbolSymbolOrderByTsDesc(symbol).stream().filter(t->!demo||!dataset.contains(symbol)||"HISTORICAL_REPLAY".equals(t.getFeedMode())).toList();}
+    public List<MarketTick> getRecentTicks(String symbol){return ticks.findTop100BySymbolSymbolOrderByTsDesc(symbol).stream().filter(t->!demo||!dataset.contains(symbol)||"SIMULATED_LIVE".equals(t.getFeedMode())).toList();}
     public List<OhlcvBar> getHistoricalBars(String symbol,String interval){
-        if(!Set.of("1d","1h").contains(interval))throw new IllegalArgumentException("Use 1d or 1h interval");
+        if(interval.equals("1m")){
+            var feed=replayFeed.getIfAvailable();
+            if(feed==null)throw new IllegalArgumentException("Live simulation is not enabled");
+            var history=feed.snapshot(symbol).bars();return history.subList(Math.max(0,history.size()-120),history.size());
+        }
+        if(!Set.of("1d","1h").contains(interval))throw new IllegalArgumentException("Use 1m, 1d or 1h interval");
         String key="market:ohlcv:"+symbol+":"+interval+(demo?":"+dataset.snapshot().id():"");
         boolean replay=demo&&dataset.contains(symbol);
         if(!replay)try {String value=redis.opsForValue().get(key);if(value!=null)return json.readValue(value,new TypeReference<List<OhlcvBar>>(){});}catch(Exception ignored){}
         LocalDate visibleTo=dataset.snapshot().to();
-        var feed=replayFeed.getIfAvailable();
-        if(replay&&feed!=null&&feed.quote(symbol)!=null)visibleTo=feed.quote(symbol).getSourceDate();
         var result=bars.findBySymbolSymbolAndIntervalAndBarTimeBetweenOrderByBarTimeAsc(symbol,interval,replay?dataset.snapshot().from().atStartOfDay():LocalDate.now().minusYears(1).atStartOfDay(),replay?visibleTo.atTime(23,59,59):LocalDateTime.now());
         if(!replay)try{redis.opsForValue().set(key,json.writeValueAsString(result),Duration.ofSeconds(60));}catch(Exception ignored){}
         return result;

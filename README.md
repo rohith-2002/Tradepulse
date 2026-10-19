@@ -1,6 +1,6 @@
 # TradePulse
 
-TradePulse is an Angular and Spring Boot market research application with streaming prices, price alerts, notifications, and historical strategy simulations. It does not place trades. The demo replays recorded daily prices for six NSE stocks from March 2020, a high-volatility stress-test month. See [historical data and provenance](docs/HISTORICAL_DATA.md).
+TradePulse is an Angular and Spring Boot market research application with streaming prices, price alerts, notifications, and historical strategy simulations. It does not place trades. The demo generates continuous simulated ticks for six NSE stocks, calibrated from recorded March 2020 prices and volatility. See [historical data and provenance](docs/HISTORICAL_DATA.md).
 
 ## Workspace
 
@@ -20,13 +20,13 @@ Install Docker Desktop with the Compose plugin and ensure the engine is running.
 docker compose up --build -d
 ```
 
-The first build downloads Maven, npm and container dependencies. Infrastructure health checks gate backend startup. The backend imports a bundled public historical snapshot: 21 March 2020 sessions per stock plus 83 earlier sessions for indicator warm-up, followed by April as the moving-market continuation. Every three seconds it reveals the next April candle and recorded daily close/volume, looping after April ends. These are historical prices, not current quotes or future predictions.
+The first build downloads Maven, npm and container dependencies. Infrastructure health checks gate backend startup. The backend imports a bundled public historical snapshot. The daily-history view shows March 2020, with earlier sessions available for historical indicator warm-up. A separate continuous simulation starts at the March closing price and generates approximately one tick per second using scaled, centered historical returns. Ticks form current-time 1-minute candles without replaying dates or looping the month. Intraday warm-up candles are synthetic; generated prices are not current exchange quotes or predictions. See [continuous simulation](docs/CONTINUOUS_SIMULATION.md).
 
 - UI: http://localhost:4200
 - API documentation: http://localhost:8080/swagger-ui.html
 - Kafka UI: http://localhost:8085
 
-Create an account using the UI. There is no shared default login. Set a price-above alert with a low positive threshold to exercise the price → alert → notification pipeline. Open Strategy lab, choose an instrument and use its default March 2020 date range to run SMA, RSI or MACD.
+Create an account using the UI. There is no shared default login. Set a price-above alert with a low positive threshold to exercise the price → alert → notification pipeline. Open Strategy lab, choose an instrument and use Start / restart live strategy for continuously updated SMA, RSI or MACD results. The historical-backtest button separately uses the selected daily date range.
 
 ```powershell
 docker compose logs -f backend
@@ -68,7 +68,7 @@ Or run `./scripts/verify.ps1`. Backend tests use an isolated H2 database; the Ka
 
 ## Configuration
 
-`application.yml` is the single source of backend defaults. `application.properties` intentionally contains no duplicate settings. `application-demo.yml` enables the seed/feed and a public development-only JWT key.
+`application.yml` is the single source of backend defaults. `application.properties` intentionally contains no duplicate settings. `application-demo.yml` enables historical imports and continuous simulation, with an ephemeral signing key when no JWT secret is configured.
 
 | Environment variable | Purpose |
 |---|---|
@@ -78,7 +78,7 @@ Or run `./scripts/verify.ps1`. Backend tests use an isolated H2 database; the Ka
 | `KAFKA_BOOTSTRAP_SERVERS` | Broker addresses reachable from the application |
 | `JWT_SECRET` | Base64-encoded random signing key, at least 32 bytes; required outside demo/test |
 | `MAIL_USERNAME`, `MAIL_PASSWORD` | SMTP account and credential for EMAIL channel events |
-| `SPRING_PROFILES_ACTIVE` | Use `demo` for historical replay on a local instance |
+| `SPRING_PROFILES_ACTIVE` | Use `demo` for continuous simulated prices on a local instance |
 
 Demo mode generates an in-memory signing key when `JWT_SECRET` is absent; sign in again after restarting the backend. Non-demo mode requires your own secret. The `tradepulse` database password in the local examples is a public demo default, not a private credential. Supply your own environment variables for deployment; `.env` and local credential files are excluded from Git and Docker build contexts. The fixed key under test resources is only a test fixture.
 

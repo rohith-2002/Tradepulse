@@ -5,7 +5,7 @@ import { Observable, catchError, finalize, shareReplay, switchMap, tap, throwErr
 
 export interface Session { accessToken:string; refreshToken:string; email:string; userId:number; }
 export interface SymbolInfo { id:number; symbol:string; exchange:string; sector:string; }
-export interface Tick { price:number; volume:number; timestamp?:string; ts?:string; changePercent?:number; sourceDate?:string; feedMode?:string; open?:number; high?:number; low?:number; }
+export interface Tick { barTime?:string; interval?:string; price:number; volume:number; timestamp?:string; ts?:string; changePercent?:number; sourceDate?:string; feedMode?:string; open?:number; high?:number; low?:number; }
 export interface Bar { open:number; high:number; low:number; close:number; volume:number; barTime:string; }
 export interface Alert { id:number; symbol:SymbolInfo; conditionType:string; threshold:number; status:string; }
 export interface Notice { id:number; message:string; status:string; sentAt:string; }
@@ -47,4 +47,4 @@ export class Api {
 }
 export function errorMessage(e:unknown){const err=e as HttpErrorResponse;return err.status===0?'Cannot reach the backend. Check that TradePulse is running.':err.error?.message||'The request could not be completed. Please try again.';}
 
-export interface DatasetInfo { enabled:boolean; source:string; sourceUrl:string; from:string; to:string; replayFrom:string; replayTo:string; notes:string; instruments:{symbol:string;dailyVolatilityPercent:number}[]; }
+export interface DatasetInfo { mode?:string; enabled:boolean; source:string; sourceUrl:string; from:string; to:string; replayFrom:string; replayTo:string; notes:string; instruments:{symbol:string;dailyVolatilityPercent:number}[]; }
